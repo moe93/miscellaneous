@@ -1,5 +1,7 @@
-#!/usr/bin/env python3
-# Author: Andreas Spiess
+# Adapted from Andreas Spiess
+# 
+# Author: Mohammad Odeh
+# Date  : Mar. 31st, 2018 Year of Our Lord
 
 from    time            import  sleep
 import  RPi.GPIO        as      GPIO
