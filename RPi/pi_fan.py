@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Author: Andreas Spiess
 
-
 from    time            import  sleep
 import  RPi.GPIO        as      GPIO
 import  os, time, signal, sys
