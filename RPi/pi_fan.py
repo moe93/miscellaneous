@@ -1,10 +1,10 @@
-# Adapted from Andreas Spiess
-# 
-# Author: Mohammad Odeh
-# Date  : Mar. 31st, 2018 Year of Our Lord
+#!/usr/bin/env python3
+# Author: Andreas Spiess
 
-from    time            import  sleep
-import  RPi.GPIO        as      GPIO
+
+from    time                    import  sleep
+import  RPi.GPIO                as      GPIO
+import  paho.mqtt.client        as      mqtt
 import  os, time, signal, sys
 
 fanPin = 18                 # PWM pin
@@ -14,12 +14,19 @@ dt_ON = time.time()         # ON time
 dt_OFF= time.time()         # OFF time
 turbo_ON = 5*60             # Switch turbo ON  after 5 minutes
 turbo_OFF = turbo_ON + 2*60 # Switch turbo OFF after 2 minutes
+turboStatus = "OFF"         # Turbo Status (initially OFF)
 
 fanSpeed = 100              # Max fan speed
 sum = 0                     # Error sum (?)
 pTemp = 15                  # Kp
 iTemp = 0.4                 # Ki
-    
+
+###
+# START MQTT PUBLISHER
+###
+client = mqtt.Client()
+client.connect("localhost", 1883, 60)
+
 def getCPUtemperature():
     res = os.popen( 'vcgencmd measure_temp' ).readline()
     temp =( res.replace("temp=", "").replace("'C\n", "") )
@@ -31,7 +38,7 @@ def fanOFF():
     return( 1 )                                 # Return successfuly
 
 def handleFan():
-    global fanSpeed, sum, dt_ON                 # Change global variables
+    global fanSpeed, sum, dt_ON, turboStatus    # Change global variables
     
     actualTemp = float( getCPUtemperature() )   # Get current temperature
 
@@ -44,9 +51,11 @@ def handleFan():
 
     # Check if we need to enable turbo boost
     if( time.time() - dt_ON > turbo_ON and diff > 1.0 ):
+        turboStatus = "ON"                      # Turbo Status
         fanSpeed = 100                          # Set speed @ MAX
         
         if( time.time() - dt_ON > turbo_OFF ):  # If past allowed time
+            turboStatus = "OFF"                 # Turbo Status
             dt_ON = time.time()                 # Reset timer
 
     # Else if turbo is not needed
@@ -61,14 +70,19 @@ def handleFan():
     elif( sum < -100 )      : sum = -100
     else                    : pass
 
-    print( "actualTemp {:4.2f} ".format(actualTemp) ) ,
-    print( "TempDiff {:4.2f} "  .format( diff )     ) ,
-    print( "pDiff {:4.2f} "     .format( pDiff )    ) ,
-    print( "iDiff {:4.2f} "     .format( iDiff )    ) ,
-    print( "fanSpeed {:4.2f}"   .format( fanSpeed ) )
+##    print( "actualTemp {:4.2f} ".format(actualTemp) ) ,
+##    print( "TempDiff {:4.2f} "  .format( diff )     ) ,
+##    print( "pDiff {:4.2f} "     .format( pDiff )    ) ,
+##    print( "iDiff {:4.2f} "     .format( iDiff )    ) ,
+##    print( "fanSpeed {:4.2f}"   .format( fanSpeed ) )
     
     myPWM.ChangeDutyCycle( fanSpeed )
-
+    arm_freq = os.popen( "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq" ).readline()
+    client.publish( "RPi/armFreq", int(arm_freq)/1000000. )
+    client.publish( "RPi/temperature", actualTemp )
+    client.publish( "RPi/fanSpeed", fanSpeed )
+    client.publish( "RPi/turboMode", turboStatus )
+    
     return()	
 
 # A little redundant function but useful if you want to add logging
