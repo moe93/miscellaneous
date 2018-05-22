@@ -12,9 +12,11 @@ After=multi-user.target
 
 
 [Service]
-Type=idle
+Type=simple
+WorkingDirectory=/home/pi/
 ExecStart=/usr/bin/python /home/pi/pi_fan.py > /home/pi/pi_fan.log 2>&1
-Restart=always
+Restart=on-failure
+RestartSec=5
 User=pi
 
 [Install]
