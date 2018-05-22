@@ -1,112 +1,169 @@
-#!/usr/bin/env python3
-# Author: Andreas Spiess
+'''
+*
+* PID Controller for 5V fan adapted
+* from Andreas Spiess
+*
+* VERSION: 1.0
+*   - ADDED   : Proper PID controllers
+*   - MODIFIED: Better documentation/streamline
+*
+* KNOWN ISSUES:
+*   - Non atm
+*
+* AUTHOR                    :   Mohammad Odeh
+* WRITTEN                   :   Mar. 31st, 2018 Year of Our Lord
+* LAST CONTRIBUTION DATE    :   May. 22nd, 2018 Year of Our Lord
+*
+'''
+
+# Import modules
+from    time                    import  sleep           # Delays
+import  RPi.GPIO                as      GPIO            # PWM
+import  paho.mqtt.client        as      mqtt            # Communication
+import  os, time, signal, sys                           # OS commands
 
 
-from    time                    import  sleep
-import  RPi.GPIO                as      GPIO
-import  paho.mqtt.client        as      mqtt
-import  os, time, signal, sys
-
-fanPin = 18                 # PWM pin
-desiredTemp = 40            # Desired temperature
-
-dt_ON = time.time()         # ON time
-dt_OFF= time.time()         # OFF time
-turbo_ON = 5*60             # Switch turbo ON  after 5 minutes
-turbo_OFF = turbo_ON + 2*60 # Switch turbo OFF after 2 minutes
-turboStatus = "OFF"         # Turbo Status (initially OFF)
-
-fanSpeed = 100              # Max fan speed
-sum = 0                     # Error sum (?)
-pTemp = 15                  # Kp
-iTemp = 0.4                 # Ki
-
-###
-# START MQTT PUBLISHER
-###
-client = mqtt.Client()
-client.connect("localhost", 1883, 60)
+# ************************************************************************
+# =====================> DEFINE NECESSARY FUNCTIONS <=====================
+# ************************************************************************
 
 def getCPUtemperature():
-    res = os.popen( 'vcgencmd measure_temp' ).readline()
-    temp =( res.replace("temp=", "").replace("'C\n", "") )
-    #print("temp is {0}".format(temp)) #Uncomment here for testing
+    '''
+    Read CPU temperature
+    '''
+    
+    res  = os.popen( 'vcgencmd measure_temp' ).readline()
+    temp = ( res.replace("temp=", "").replace("'C\n", "") )
     return( temp )
 
+# ------------------------------------------------------------------------
+
 def fanOFF():
-    myPWM.ChangeDutyCycle( 0 )                  # switch fan off
-    return( 1 )                                 # Return successfuly
+    '''
+    Turn fan OFF
+    '''
+    
+    myPWM.ChangeDutyCycle( 0 )                          # Switch fan off
+    return( 1 )                                         # Return successfuly
+
+# ------------------------------------------------------------------------
 
 def handleFan():
-    global fanSpeed, sum, dt_ON, turboStatus    # Change global variables
+    '''
+    PID controller for the fan. Adjusts fan speed.
+    '''
     
-    actualTemp = float( getCPUtemperature() )   # Get current temperature
+    global fanSpeed, dt_ON, turboStatus                 # Change global variables
+    global integrator, derivator                        # ...
+    
+    actualTemp = float( getCPUtemperature() )           # Get current temperature
 
-    diff  = actualTemp - desiredTemp            # 2 plus 2 is 4
-    sum   = sum  + diff                         # minus 1 dats
-    pDiff = diff * pTemp                        # 3, quick mafs
-    iDiff = sum  * iTemp                        # ...
+    error = actualTemp - desiredTemp                    # 2 plus 2 is 4
+    integrator  = integrator + error                    # ...
+    P_val = Kp * error                                  # minus 1 dats
+    I_val = Ki * integrator                             # ...
+    D_val = Kd * ( error - derivator )                  # 3, quick mafs
 
-    fanSpeed = pDiff + iDiff                    # Set fan speed
+    derivator   = error                                 # Update derivator
+    fanSpeed    = P_val + I_val + D_val                 # Set fan speed                             
 
     # Check if we need to enable turbo boost
-    if( time.time() - dt_ON > turbo_ON and diff > 1.0 ):
-        turboStatus = "ON"                      # Turbo Status
-        fanSpeed = 100                          # Set speed @ MAX
+    if( time.time() - dt_ON > turbo_ON ):
+        turboStatus = "ON"                              # Turbo Status
+        fanSpeed = 100                                  # Set speed @ MAX
         
-        if( time.time() - dt_ON > turbo_OFF ):  # If past allowed time
-            turboStatus = "OFF"                 # Turbo Status
-            dt_ON = time.time()                 # Reset timer
+        if( time.time() - dt_ON > turbo_OFF ):          # If past allowed time
+            turboStatus = "OFF"                         # Turbo Status
+            dt_ON = time.time()                         # Reset timer
 
     # Else if turbo is not needed
     else:
         # Check as to not overshoot fan speed and burn GPIO pin
-        if  ( fanSpeed > 100 )  : fanSpeed = 100
-        elif( fanSpeed < 15  )  : fanSpeed =   0
-        else                    : pass
+        if  ( fanSpeed > 100 )  : fanSpeed = 100        # Limit max speed to 100
+        elif( fanSpeed <   0  ) : fanSpeed =   0        # Limit min speed to   0
+        else                    : pass                  # ...
 
-    # Set limits to sum
-    if  ( sum >  100 )      : sum =  100
-    elif( sum < -100 )      : sum = -100
-    else                    : pass
+    # Set limits on integrator
+    if  ( integrator > max_int ): integrator = max_int  # Windup guard for integrator
+    elif( integrator < min_int ): integrator = min_int  # ...
+    else                        : pass                  # ...
 
 ##    print( "actualTemp {:4.2f} ".format(actualTemp) ) ,
-##    print( "TempDiff {:4.2f} "  .format( diff )     ) ,
-##    print( "pDiff {:4.2f} "     .format( pDiff )    ) ,
-##    print( "iDiff {:4.2f} "     .format( iDiff )    ) ,
-##    print( "fanSpeed {:4.2f}"   .format( fanSpeed ) )
+##    print( "TempDiff {:5.2f} "  .format( error )    ) ,
+##    print( "pDiff {:6.2f} "     .format( P_val )    ) ,
+##    print( "iDiff {:6.2f} "     .format( I_val )    ) ,
+##    print( "dDiff {:6.2f} "     .format( D_val )    ) ,
+##    print( "fanSpeed {:6.2f}"   .format( fanSpeed ) )
     
-    myPWM.ChangeDutyCycle( fanSpeed )
+    myPWM.ChangeDutyCycle( fanSpeed )                   # Set fan speed
+
+    # Publish on MQTT
     arm_freq = os.popen( "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq" ).readline()
-    client.publish( "RPi/armFreq", int(arm_freq)/1000000. )
-    client.publish( "RPi/temperature", actualTemp )
-    client.publish( "RPi/fanSpeed", fanSpeed )
-    client.publish( "RPi/turboMode", turboStatus )
+    client.publish( "RPi/armFreq"       , int(arm_freq)/1000000.    )
+    client.publish( "RPi/temperature"   , actualTemp                )
+    client.publish( "RPi/fanSpeed"      , fanSpeed                  )
+    client.publish( "RPi/turboMode"     , turboStatus               )
     
     return()	
 
-# A little redundant function but useful if you want to add logging
+# ------------------------------------------------------------------------
+
 def setPin( mode ):
+    '''
+    A little redundant function but useful if you
+    want to add logging
+    '''
+    
     GPIO.output( fanPin, mode )
     return()
 
-# **************
-# MAKE IT HAPPEN
-# **************
-try:
-    GPIO.setwarnings( False )
-    GPIO.setmode( GPIO.BCM )
-    GPIO.setup( fanPin, GPIO.OUT )
-    myPWM = GPIO.PWM( fanPin, 50 )
-    myPWM.start( 50 )
-    GPIO.setwarnings( False )
-    fanOFF()
-    while True:
-        handleFan()         # Do maffs here
-        sleep( 1.0 )        # Read temperature every 1 sec 
+# ************************************************************************
+# ===========================> SETUP PROGRAM <===========================
+# ************************************************************************
 
-except KeyboardInterrupt:   # Raise keyboard interrupt ( CTRL+C )
-    fanOFF()                # Shutdown fan
+# General info/variables
+fanPin = 18                                             # PWM pin
+desiredTemp = 35                                        # Desired temperature
+
+dt_ON = time.time()                                     # ON time
+dt_OFF= time.time()                                     # OFF time
+turbo_ON = 15*60                                        # Turbo ON  after 15 minutes
+turbo_OFF = turbo_ON + 2*60                             # Turbo OFF after  2 minutes
+turboStatus = "OFF"                                     # Turbo OFF initially
+
+# Setup PID
+fanSpeed = 100                                          # Max fan speed
+Kp = 15                                                 # Kp
+Ki = 0.4                                                # Ki
+Kd = 1.2                                                # Kd
+
+integrator  = 0                                         # Integrator
+derivator   = 0                                         # Derivator
+max_int     = 100                                       # Max value attained by integrator
+min_int     =-100                                       # Min value attained by integrator
+
+# Start MQTT publisher
+addr = "localhost"                                      # Address to publish to
+client = mqtt.Client()                                  # Initialize MQTT client 
+client.connect( addr, 1883, 60 )                        # Connect client to host
+
+# ************************************************************************
+# =========================> MAKE IT ALL HAPPEN <=========================
+# ************************************************************************
+try:
+    GPIO.setwarnings( False )                           # Disable system warnings
+    GPIO.setmode( GPIO.BCM )                            # Use BCM numbering scheme
+    GPIO.setup( fanPin, GPIO.OUT )                      # Set pin as OUTPUT
+    myPWM = GPIO.PWM( fanPin, 50 )                      # Define PWM pin at 50Hz
+    myPWM.start( 50 )                                   # Start with 50%
+    fanOFF()                                            # Turn fan OFF before running
+    
+    while( True ):                                      # Loop 43va!
+        handleFan()                                     # Do maffs here
+        sleep( 1.0 )                                    # Read temperature every 1 sec 
+
+except KeyboardInterrupt:                               # Raise keyboard interrupt ( CTRL+C )
+    fanOFF()                                            # Shutdown fan
 
 finally:
-    GPIO.cleanup()          # Reset GPIO ports used
+    GPIO.cleanup()                                      # Reset GPIO ports used
