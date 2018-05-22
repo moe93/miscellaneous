@@ -1,0 +1,21 @@
+# Place the service file in /etc/systemd/system as root
+# Change permissions of the file to the following:
+#	> sudo chmod 644 /etc/systemd/syste/pi_fan.service
+#
+# Have the service start on boot by issuing the following commands:
+#	> sudo systemctl deamon-reload
+#	> sudo systemctl enable pi_fan.service
+
+[Unit]
+Description=Run PID controlled fan and log stderr + stdout (if any)
+After=multi-user.target
+
+
+[Service]
+Type=idle
+ExecStart=/usr/bin/python /home/pi/pi_fan.py > /home/pi/pi_fan.log 2>&1
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
