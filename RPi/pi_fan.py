@@ -1,18 +1,20 @@
+#!/usr/bin/python
 '''
 *
 * PID Controller for 5V fan adapted
 * from Andreas Spiess
 *
-* VERSION: 1.0
+* VERSION: 1.0.1
 *   - ADDED   : Proper PID controllers
-*   - MODIFIED: Better documentation/streamline
+*   - MODIFIED: Better documentation/streamline code
+*   - ADDED   : Send PID controller info over MQTT
 *
 * KNOWN ISSUES:
 *   - Non atm
 *
 * AUTHOR                    :   Mohammad Odeh
 * WRITTEN                   :   Mar. 31st, 2018 Year of Our Lord
-* LAST CONTRIBUTION DATE    :   May. 22nd, 2018 Year of Our Lord
+* LAST CONTRIBUTION DATE    :   May. 23rd, 2018 Year of Our Lord
 *
 '''
 
@@ -80,7 +82,7 @@ def handleFan():
     else:
         # Check as to not overshoot fan speed and burn GPIO pin
         if  ( fanSpeed > 100 )  : fanSpeed = 100        # Limit max speed to 100
-        elif( fanSpeed <   0  ) : fanSpeed =   0        # Limit min speed to   0
+        elif( fanSpeed <  35  ) : fanSpeed =  35        # Limit min speed to  35
         else                    : pass                  # ...
 
     # Set limits on integrator
@@ -98,11 +100,13 @@ def handleFan():
     myPWM.ChangeDutyCycle( fanSpeed )                   # Set fan speed
 
     # Publish on MQTT
+    PID = "{}, {}, {}, {}".format(error, P_val, I_val, D_val)
     arm_freq = os.popen( "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq" ).readline()
     client.publish( "RPi/armFreq"       , int(arm_freq)/1000000.    )
     client.publish( "RPi/temperature"   , actualTemp                )
     client.publish( "RPi/fanSpeed"      , fanSpeed                  )
     client.publish( "RPi/turboMode"     , turboStatus               )
+    client.publish( "RPi/PID"           , PID                       )
     
     return()	
 
@@ -127,7 +131,7 @@ desiredTemp = 35                                        # Desired temperature
 
 dt_ON = time.time()                                     # ON time
 dt_OFF= time.time()                                     # OFF time
-turbo_ON = 15*60                                        # Turbo ON  after 15 minutes
+turbo_ON = 30*60                                        # Turbo ON  after 30 minutes
 turbo_OFF = turbo_ON + 2*60                             # Turbo OFF after  2 minutes
 turboStatus = "OFF"                                     # Turbo OFF initially
 
