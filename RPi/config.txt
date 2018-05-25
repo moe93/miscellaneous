@@ -1,0 +1,93 @@
+# For more options and information see
+# http://rpf.io/configtxt
+# Some settings may impact device functionality. See link above for details
+
+# uncomment if you get no picture on HDMI for a default "safe" mode
+#hdmi_safe=1
+
+# uncomment this if your display has a black border of unused pixels visible
+# and your display can output without overscan
+#disable_overscan=1
+
+# uncomment the following to adjust overscan. Use positive numbers if console
+# goes off screen, and negative if there is too much border
+overscan_left=-45
+overscan_right=-45
+overscan_top=-45
+overscan_bottom=-45
+
+# uncomment to force a console size. By default it will be display's size minus
+# overscan.
+#framebuffer_width=944
+#framebuffer_height=524
+
+# uncomment if hdmi display is not detected and composite is being output
+#hdmi_force_hotplug=1
+
+# uncomment to force a specific HDMI mode (this will force VGA)
+#hdmi_group=1
+#hdmi_mode=1
+
+# uncomment to force a HDMI mode rather than DVI. This can make audio work in
+# DMT (computer monitor) modes
+#hdmi_drive=2
+
+# uncomment to increase signal to HDMI, if you have interference, blanking, or
+# no display
+#config_hdmi_boost=4
+
+# uncomment for composite PAL
+#sdtv_mode=2
+
+#uncomment to overclock the arm. 700 MHz is the default.
+#arm_freq=800
+
+# Uncomment some or all of these to enable the optional hardware interfaces
+dtparam=i2c_arm=on
+#dtparam=i2s=on
+#dtparam=spi=on
+
+# Uncomment this to enable the lirc-rpi module
+#dtoverlay=lirc-rpi
+
+# Additional overlays and parameters are documented /boot/overlays/README
+
+# Enable audio (loads snd_bcm2835)
+dtparam=audio=on
+start_x=1
+gpu_mem=512
+
+# Overclocking parameters
+disable_pvt=0 			# Measure RAM temperature enabled
+
+force_turbo=0 			# Enable dynamic clock speeds
+boot_delay=1 			# Delay boot up by 1 second
+avoid_pwm_pll=1 		# Don't dedicate a pll to PWM audio (sets core_freq independent from gpu_freq)
+
+arm_freq_min=450 		# Idle ARM processor core frequency in MHz 	  ( default 600 )
+core_freq_min=200       	# Idle GPU processor core frequency in MHz 	  ( default 250 )
+arm_freq=1550 			# Max ARM processor core frequency in MHz  	  ( default 700 )
+core_freq=600 			# Max GPU processor core frequency in MHz  	  ( default 250 )
+over_voltage=6 			# ARM/GPU voltage adjust
+
+sdram_freq_min=300 		# Idle frequency of SDRAM in MHZ		  ( default 400 )
+sdram_freq=600 			# Max frequency of SDRAM in MHz 		  ( default 400 )
+sdram_schmoo=0x02000020 	# Set SDRAM schmoo to allow overclock > 500MHz
+over_voltage_sdram_p=6  	# SDRAM physical voltage offset
+over_voltage_sdram_i=4  	# SDRAM I/O voltage offset
+over_voltage_sdram_c=4  	# SDRAM controller voltage offset
+
+h264_freq=500 			# Frequency of hardware video block in MHz	  ( default 250 )
+isp_freq=500 			# Frequency of image sensor pipeline block in MHz ( default 250 )
+v3d_freq=500 			# Frequency of 3D block in MHz			  ( default 250 )
+
+temp_limit=80 			# Start throttling at this temperature
+initial_turbo=60 		# Turbo mode at boot for given amount of seconds
+
+# Unused overclocking parameters
+#current_limit_override=0x5A000020
+#dtoverlay=sdhost,overclock_50=100
+##video_hard_sync=true
+#video_hard_sync_frames=3
+#video_frame_delay=5
+#scaling_kernel=8
