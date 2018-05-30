@@ -4,17 +4,18 @@
 * PID Controller for 5V fan adapted
 * from Andreas Spiess
 *
-* VERSION: 1.0.1
-*   - ADDED   : Proper PID controllers
-*   - MODIFIED: Better documentation/streamline code
-*   - ADDED   : Send PID controller info over MQTT
+* VERSION: 1.1
+*   - MODIFIED: Actually "integrate" and "differentiate"
+*               ID parts of the controller using dt value
 *
 * KNOWN ISSUES:
-*   - Non atm
+*   - D_val is initialized to a large number (check the math)
+*       It isn't causing issues but for sake of proper integration
+*       it needs to be fixed
 *
 * AUTHOR                    :   Mohammad Odeh
 * WRITTEN                   :   Mar. 31st, 2018 Year of Our Lord
-* LAST CONTRIBUTION DATE    :   May. 23rd, 2018 Year of Our Lord
+* LAST CONTRIBUTION DATE    :   May. 30th, 2018 Year of Our Lord
 *
 '''
 
@@ -55,20 +56,32 @@ def handleFan():
     PID controller for the fan. Adjusts fan speed.
     '''
     
-    global fanSpeed, dt_ON, turboStatus                 # Change global variables
-    global integrator, derivator                        # ...
+    global fanSpeed, dt_ON, turboStatus                 # Access and change
+    global integrator, derivator, error_old             # global variables
+    global t1, t2                                       # ...
     
-    actualTemp = float( getCPUtemperature() )           # Get current temperature
+    actualTemp  = float( getCPUtemperature() )          # Get current temperature
 
-    error = actualTemp - desiredTemp                    # 2 plus 2 is 4
-    integrator  = integrator + error                    # ...
-    P_val = Kp * error                                  # minus 1 dats
-    I_val = Ki * integrator                             # ...
-    D_val = Kd * ( error - derivator )                  # 3, quick mafs
+    t2          = time.time()                           # Get current time                           
+    dt          = t2 - t1                               # Change in time from previous computation
+    t1          = t2                                    # Update previous time
+    
+    error       = actualTemp - desiredTemp              # Get proportional error
+    integrator  = integrator + error*dt                 # Get integral error
+    derivator   = ( error - error_old ) / dt            # Get derivative error
+    error_old   = error                                 # Update error_old
 
-    derivator   = error                                 # Update derivator
+    P_val       = Kp * error                            # Compute PID parts
+    I_val       = Ki * integrator                       # ...
+    D_val       = Kd * derivator                        # ...
+
     fanSpeed    = P_val + I_val + D_val                 # Set fan speed                             
 
+    # Set limits on integrator
+    if  ( integrator > max_int ): integrator = max_int  # Windup guard for integrator
+    elif( integrator < min_int ): integrator = min_int  # ...
+    else                        : pass                  # ...
+    
     # Check if we need to enable turbo boost
     if( time.time() - dt_ON > turbo_ON ):
         turboStatus = "ON"                              # Turbo Status
@@ -82,14 +95,9 @@ def handleFan():
     else:
         # Check as to not overshoot fan speed and burn GPIO pin
         if  ( fanSpeed > 100 )  : fanSpeed = 100        # Limit max speed to 100
-        elif( fanSpeed <  35  ) : fanSpeed =  35        # Limit min speed to  35
+        elif( fanSpeed <  15  ) : fanSpeed =  15        # Limit min speed to  15
         else                    : pass                  # ...
-
-    # Set limits on integrator
-    if  ( integrator > max_int ): integrator = max_int  # Windup guard for integrator
-    elif( integrator < min_int ): integrator = min_int  # ...
-    else                        : pass                  # ...
-
+    
 ##    print( "actualTemp {:4.2f} ".format(actualTemp) ) ,
 ##    print( "TempDiff {:5.2f} "  .format( error )    ) ,
 ##    print( "pDiff {:6.2f} "     .format( P_val )    ) ,
@@ -127,7 +135,7 @@ def setPin( mode ):
 
 # General info/variables
 fanPin = 18                                             # PWM pin
-desiredTemp = 35                                        # Desired temperature
+desiredTemp = 37                                        # Desired temperature
 
 dt_ON = time.time()                                     # ON time
 dt_OFF= time.time()                                     # OFF time
@@ -143,6 +151,8 @@ Kd = 1.2                                                # Kd
 
 integrator  = 0                                         # Integrator
 derivator   = 0                                         # Derivator
+error_old   = 0                                         # Previous error for derivator
+t1, t2      = time.time(), time.time()                  # dt for integral and derivative parts
 max_int     = 100                                       # Max value attained by integrator
 min_int     =-100                                       # Min value attained by integrator
 
